@@ -1,0 +1,120 @@
+library(tidyverse)
+library(data.table)
+
+
+data<- read.csv('/Users/mbalet5/Documents/Rtest/Data frames CSV/testdataframe.csv',
+             sep = ',', header = TRUE)
+
+
+xdata<- data.frame(data$CO2.Emissions,data$Phosphorus, data$Land.System.Change, data$Ecological.Footprint,
+               data$Material.Footprint ,data$Nitrogen)
+
+ydata<-data.frame(data$Employment, data$Equality, data$Democratic.Quality, data$Social.Support, data$Education,
+                  data$Access.to.Energy, data$Income.Poverty, data$Sanitation, data$Nutrition, data$Life.Expectancy, data$Life.Satisfaction)
+
+
+pairs <- list()
+n <- 1;
+for(i in 1:length(xdata)) {
+  for(j in 1:length(ydata)) {
+    pairs[[n]] <- data.frame(xdata[i], ydata[j]);
+    
+    pairs[[n]][pairs[[n]]== 0.00]<- NA
+    
+    pairs[[n]]<- pairs[[n]][!is.na(pairs[[n]][1]),]
+    pairs[[n]]<- pairs[[n]][!is.na(pairs[[n]][2]),] 
+    
+    pairs[[n]]<- c(pairs[[n]][1],pairs[[n]][2])
+    n <- n + 1;
+  }
+}
+
+n<-1
+i<-1
+f<-1
+p<-1
+r<-1
+years<- unique(data$date)
+
+
+for (i in 1:length(pairs)) {
+  
+  final_mat<- matrix(nrow = 10,ncol = length(years));
+
+  #for each year
+  for (j in 1:length(years)) {
+    
+    row_indexes<-which(data$date==years[j])
+     #lm(log(y)~log(x))                             
+    res<-lm(log(pairs[[i]][2][[f]][c(row_indexes)])~log(pairs[[i]][1][[f]][c(row_indexes)]))
+    
+    summary_res<-summary(res)
+    tmp<-data.frame(summary_res$coefficients)
+    
+    final_vector<-unlist(c(tmp[1, ], tmp[2, ], summary_res$r.squared, summary_res$adj.r.squared))
+    
+    final_mat[,j]<- final_vector;
+    
+  
+  output_table<-data.frame(final_mat);
+  colnames(output_table)<- as.character(years);
+  rownames(output_table)<- c(paste0('(Intercept)',colnames(tmp[1,])), paste0('(Log)', colnames(tmp[2,])),
+                             'r.squared','adj.r.squared');
+output_table<-rownames_to_column(output_table)
+  }
+  
+  slice_two<-pivot_longer(output_table, cols = 2:25, names_to = 'year', values_to = 'value')
+  slice_two$year<-as.numeric(slice_two$year)
+  slice_two<- pivot_wider(slice_two, names_from = rowname, values_from = value)
+  slice_two<-as.data.frame(slice_two)
+  
+  mean_x<- lapply((xdata[[p]][c(years)]),mean)
+  mean_x<-log(unlist(mean_x))
+  mean_y<- lapply((ydata[[r]][c(years)]),mean)
+  mean_y<-log(unlist(mean_y))
+  slice_two<- cbind(slice_two, mean_x)
+  slice_two<- cbind(slice_two, mean_y)
+  
+  slice_two<-slice_two[,c(1,2,3,4,5,12,6,7,8,9,10,11,13)]
+  
+  assign(paste0('log_table',sep = '_',i),slice_two)
+ rm(output_table)
+  #write_csv(slice_two, file = paste('/Users/mbalet5/Documents/Rtest/i think i saved it/output/data frame/ data frame', i,'.csv'))
+
+df_list_log <- lapply(ls(pattern="log_table"), function(x) get(x))
+  
+  
+  i<- i+1
+ 
+}
+
+# if veux cree output table et slice table, run 1x loop sans slice et ensuite run avec 
+
+
+
+rm(list=ls()[grepl('output_table', ls())]) 
+
+rm(list=ls()[grepl('log_table', ls())]) 
+#rm(country_index,h,adj.r,adj.r_log,r.squar,r.squar_log,p,n,r,final_vector,mean_y)
+
+#   ~GRAPH~
+
+
+for (i in 1:length(df_list)) {
+  
+  output_graph<-ggplot(df_list[[i]])+                                                       
+          geom_point(aes(df_list[[i]]$year, df_list[[i]]$`(Intercept)Estimate`))+
+          geom_errorbar(aes(x=df_list[[i]]$year,y=df_list[[i]]$`(Intercept)Estimate`),
+                        ymin =  df_list[[i]]$`(Intercept)Estimate`-df_list[[i]]$`(Intercept)Std..Error`,
+                        ymax= df_list[[i]]$`(Intercept)Estimate`+ df_list[[i]]$`(Intercept)Std..Error`,
+                        width=0.5,size=0.2)+
+    geom_smooth(method = 'lm', formula= y~x, aes(df_list[[i]]$year, df_list[[i]]$`(Intercept)Estimate`),colour= 'red', se=FALSE, alpha=0.2)+
+          labs(x='year', y= '(Intercept)Estimate', title= i )
+ 
+  print(output_graph)
+  ggsave(filename = paste0("plot_",i,".png"), output_graph, path = '/Users/mbalet5/Documents/Rtest/i think i saved it/output/graphique')
+  i<-i+1
+  
+} 
+
+traceback()
